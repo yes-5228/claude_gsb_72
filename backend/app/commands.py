@@ -52,3 +52,27 @@ def register_commands(app):
                 Exceedance.query.count(),
             )
         )
+
+    @app.cli.command("reconcile")
+    @click.option("--apply", "apply_changes", is_flag=True,
+                  help="实际执行修复; 缺省为只读核对(dry-run), 仅打印差异")
+    def reconcile(apply_changes):
+        """按当前超标判定规则核对存量监测数据与超标记录的口径差异."""
+        from .services.reconcile_service import reconcile_measurements
+
+        report = reconcile_measurements(apply=apply_changes)
+        click.echo("模式: %s" % ("实际修复" if apply_changes else "只读核对 (加 --apply 执行修复)"))
+        click.echo(
+            "监测数据核对 %(measurements_checked)d 条, 派生字段存在差异 %(measurements_drifted)d 条"
+            % report
+        )
+        click.echo(
+            "超标记录: 待新建 %(exceedances_created)d / 更新 %(exceedances_updated)d / "
+            "撤销 %(exceedances_deleted)d; 已人工标注冲突 %(manual_conflicts)d 条(不自动处理)"
+            % report
+        )
+        for sample in report["conflict_samples"]:
+            click.echo(
+                "  - 冲突: exceedance=%(exceedance_id)s measurement=%(measurement_id)s "
+                "%(pollutant)s 状态=%(status)s" % sample
+            )

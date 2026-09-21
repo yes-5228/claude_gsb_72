@@ -18,7 +18,8 @@
 
 - **超标自动判定**: 数据写入时即按“因子 + 数据周期”取用限值, 计算超标倍数并分级, 同步生成待标注超标记录; 修正数据后超标记录自动更新或撤销。
 - **业务规则集中在后端**: 限值与分级规则位于 `backend/app/domain/`, 前端仅做展示与前置校验, 避免规则分叉。
-- **模块化组织**: 后端按 `api / services / models / domain / utils` 分层; 前端每个业务模块独占目录, 公共能力沉淀在 `components/`、`hooks/`、`api/`。
+- **统一查询与判定口径**: 多值/日期/布尔等参数解析集中在 `utils/filter_args.py`; 监测数据与超标记录各有唯一查询构造点 (`services/measurement_filters.py`、`services/exceedance_filters.py`), 列表、统计、导出与概览全部复用; 超标率与数值舍入统一走 `domain/metrics.py`; CSV 列定义统一在 `utils/export_columns.py`。同一组筛选条件在任何入口命中的**条数、行集合、顺序与汇总值完全相同**, 聚合统计各组 count / 超标数之和等于列表 total / 汇总超标数。
+- **模块化组织**: 后端按 `api / services / models / domain / utils` 分层; 前端每个业务模块独占目录, 公共能力沉淀在 `components/`、`hooks/`、`api/`, 各页筛选键与下拉选项统一来自 `constants/filters.js`, 导出动作统一走 `hooks/useCsvExport.js`。
 
 ## 技术栈
 
@@ -241,6 +242,21 @@ curl http://localhost:5000/api/meta/health
 python -m flask --app wsgi stats      # 查看监测点/数据/超标记录数量
 python -m flask --app wsgi reset-db   # 重置数据库并重建演示数据
 ```
+
+### 存量数据口径核对
+
+列表/统计/导出共用同一套查询与超标判定口径(见下文"统一口径"), 限值与判定结果在录入时做快照落库。
+历史数据若因旧版本缺陷、手工改库等与当前规则不一致, 可使用核对命令:
+
+```bash
+python -m flask --app wsgi reconcile            # 只读核对(dry-run), 输出差异条数
+python -m flask --app wsgi reconcile --apply    # 实际修复
+```
+
+- 监测数据的限值/超标倍数/是否超标等派生字段按当前规则重算, 监测值本身不变;
+- 待标注超标记录按当前口径自动 新建 / 更新 / 撤销;
+- **已人工标注(确认/忽略)且与当前判定冲突的记录绝不自动改写或删除**, 仅列入冲突清单交业务复核。
+
 
 ## 常见问题
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FilterPanel } from '../../../components/common/Card.jsx'
 import { Field, Input, Select } from '../../../components/common/FormField.jsx'
+import { STATION_FILTER_KEYS } from '../../../constants/filters.js'
 
 const STATUS_OPTIONS = [
   { value: 'active', label: '运行中' },
@@ -30,7 +31,7 @@ export default function StationFilters({ value, areas = [], loading, onSubmit, o
       loading={loading}
       onSearch={() => onSubmit(draft)}
       onReset={() => {
-        setDraft({ keyword: '', area: '', status: '', station_type: '' })
+        setDraft({ ...STATION_FILTER_KEYS })
         onReset()
       }}
     >

@@ -1,9 +1,10 @@
 """数据查询 API: 条件检索 / 聚合统计 / 导出."""
-from flask import Blueprint, current_app, request
+from flask import Blueprint, request
 
 from ..domain.constants import DATA_SOURCE_LABELS, PERIOD_LABELS, STATION_TYPE_LABELS
 from ..domain.standards import POLLUTANTS
 from ..services import query_service
+from ..utils.export_columns import MEASUREMENT_BASE_COLUMNS, csv_export
 from ..utils.pagination import paginate_query
 
 bp = Blueprint("query", __name__)
@@ -25,26 +26,8 @@ def query_statistics():
 
 @bp.get("/export")
 def query_export():
-    from ..utils.csv_export import csv_response
-
     query, _ = query_service.measurement_query(request.args)
-    rows = query.limit(current_app.config["MAX_EXPORT_ROWS"]).all()
-    columns = [
-        ("站点编码", lambda row: row.station.code if row.station else ""),
-        ("站点名称", lambda row: row.station.name if row.station else ""),
-        ("所属区域", lambda row: row.station.area if row.station else ""),
-        ("监测因子", lambda row: row.pollutant_label()),
-        ("数据周期", lambda row: PERIOD_LABELS.get(row.period, row.period)),
-        ("监测值", "value"),
-        ("单位", "unit"),
-        ("限值", "limit_value"),
-        ("是否超标", lambda row: "是" if row.is_exceeded else "否"),
-        ("超标倍数", "exceed_ratio"),
-        ("监测时间", lambda row: row.measured_at.strftime("%Y-%m-%d %H:%M")),
-        ("数据来源", lambda row: DATA_SOURCE_LABELS.get(row.data_source, row.data_source)),
-        ("录入人", "recorder"),
-    ]
-    return csv_response(rows, columns, "monitoring_query")
+    return csv_export(query, MEASUREMENT_BASE_COLUMNS, "monitoring_query")
 
 
 @bp.get("/options")

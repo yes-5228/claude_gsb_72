@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react'
-import { downloadFile } from '../../api/client.js'
 import {
   deleteMeasurement,
   exportMeasurementsUrl,
@@ -10,29 +9,21 @@ import Pagination from '../../components/common/Pagination.jsx'
 import { SectionCard } from '../../components/common/Card.jsx'
 import { Alert } from '../../components/common/Feedback.jsx'
 import { useToast } from '../../components/common/ToastProvider.jsx'
+import { MEASUREMENT_FILTER_KEYS } from '../../constants/filters.js'
+import { useCsvExport } from '../../hooks/useCsvExport.js'
 import { useListQuery } from '../../hooks/useListQuery.js'
-import { saveBlob } from '../../utils/download.js'
 import EntryForm from './components/EntryForm.jsx'
 import EntryResultPanel from './components/EntryResultPanel.jsx'
 import MeasurementFilters from './components/MeasurementFilters.jsx'
 import MeasurementTable from './components/MeasurementTable.jsx'
 
-const INITIAL_FILTERS = {
-  station_id: '',
-  pollutant: '',
-  period: '',
-  is_exceeded: '',
-  date_from: '',
-  date_to: ''
-}
-
 export default function MeasurementsPage() {
   const toast = useToast()
-  const query = useListQuery(listMeasurements, INITIAL_FILTERS)
+  const query = useListQuery(listMeasurements, MEASUREMENT_FILTER_KEYS)
   const [result, setResult] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  const { exporting, exportCsv } = useCsvExport(exportMeasurementsUrl)
 
   const handleSubmitted = useCallback(
     (payload) => {
@@ -57,18 +48,10 @@ export default function MeasurementsPage() {
     }
   }, [pendingDelete, query, toast])
 
-  const handleExport = useCallback(async () => {
-    setExporting(true)
-    try {
-      const blob = await downloadFile(exportMeasurementsUrl(query.filters))
-      saveBlob(blob, `监测数据_${Date.now()}.csv`)
-      toast.success('导出任务已完成, 请查看下载文件')
-    } catch (error) {
-      toast.error(error.message)
-    } finally {
-      setExporting(false)
-    }
-  }, [query.filters, toast])
+  const handleExport = useCallback(
+    () => exportCsv(query.filters, '监测数据'),
+    [exportCsv, query.filters]
+  )
 
   return (
     <>
@@ -84,7 +67,7 @@ export default function MeasurementsPage() {
         value={query.filters}
         loading={query.loading}
         onSubmit={(next) => query.setFilters(next)}
-        onReset={() => query.setFilters(INITIAL_FILTERS)}
+        onReset={() => query.setFilters(MEASUREMENT_FILTER_KEYS)}
       />
 
       {query.error ? <Alert tone="error">{query.error.message}</Alert> : null}

@@ -1,19 +1,12 @@
 import { useEffect, useState } from 'react'
 import { FilterPanel } from '../../../components/common/Card.jsx'
 import { Field, Input, Select } from '../../../components/common/FormField.jsx'
+import {
+  EXCEEDANCE_FILTER_KEYS,
+  EXCEEDANCE_LEVEL_OPTIONS,
+  EXCEEDANCE_STATUS_OPTIONS
+} from '../../../constants/filters.js'
 import { usePollutantMeta, useStationOptions } from '../../../hooks/useOptions.js'
-
-const STATUS_OPTIONS = [
-  { value: 'pending', label: '待标注' },
-  { value: 'confirmed', label: '已确认' },
-  { value: 'ignored', label: '已忽略' }
-]
-
-const LEVEL_OPTIONS = [
-  { value: 'light', label: '轻度超标' },
-  { value: 'moderate', label: '中度超标' },
-  { value: 'severe', label: '重度超标' }
-]
 
 export default function ExceedanceFilters({ value, loading, onSubmit, onReset }) {
   const [draft, setDraft] = useState(value)
@@ -31,15 +24,15 @@ export default function ExceedanceFilters({ value, loading, onSubmit, onReset })
       loading={loading}
       onSearch={() => onSubmit(draft)}
       onReset={() => {
-        setDraft({ status: '', level: '', pollutant: '', station_id: '', date_from: '', date_to: '', keyword: '' })
+        setDraft({ ...EXCEEDANCE_FILTER_KEYS })
         onReset()
       }}
     >
       <Field label="标注状态">
-        <Select value={draft.status || ''} onChange={update('status')} placeholder="全部状态" options={STATUS_OPTIONS} />
+        <Select value={draft.status || ''} onChange={update('status')} placeholder="全部状态" options={EXCEEDANCE_STATUS_OPTIONS} />
       </Field>
       <Field label="超标等级">
-        <Select value={draft.level || ''} onChange={update('level')} placeholder="全部等级" options={LEVEL_OPTIONS} />
+        <Select value={draft.level || ''} onChange={update('level')} placeholder="全部等级" options={EXCEEDANCE_LEVEL_OPTIONS} />
       </Field>
       <Field label="监测点">
         <Select

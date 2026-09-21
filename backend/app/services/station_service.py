@@ -2,32 +2,28 @@
 from sqlalchemy import cast, func, or_
 
 from ..domain.constants import STATION_STATUS_LABELS, STATION_TYPE_LABELS
+from ..domain.metrics import round2
 from ..errors import ConflictError, NotFoundError
 from ..extensions import db
 from ..models import Exceedance, Measurement, Station
-
-
-def _split(value):
-    if not value:
-        return []
-    return [item.strip() for item in str(value).split(",") if item.strip()]
+from ..utils import filter_args as fa
 
 
 def station_query(args):
     query = Station.query
-    keyword = (args.get("keyword") or "").strip()
+    keyword = fa.text_arg(args, "keyword")
     if keyword:
         like = "%" + keyword + "%"
         query = query.filter(
             or_(Station.name.like(like), Station.code.like(like), Station.address.like(like))
         )
-    area = (args.get("area") or "").strip()
-    if area:
-        query = query.filter(Station.area.in_(_split(area)))
-    statuses = _split(args.get("status"))
+    areas = fa.multi_str(args, "area")
+    if areas:
+        query = query.filter(Station.area.in_(areas))
+    statuses = fa.multi_str(args, "status")
     if statuses:
         query = query.filter(Station.status.in_(statuses))
-    types = _split(args.get("station_type"))
+    types = fa.multi_str(args, "station_type")
     if types:
         query = query.filter(Station.station_type.in_(types))
 
@@ -139,7 +135,7 @@ def detail_stats(station):
             "pollutant": pollutant,
             "count": int(count or 0),
             "exceeded_count": int(exceeded or 0),
-            "avg_value": round(float(avg), 2) if avg is not None else None,
+            "avg_value": round2(avg),
             "max_value": float(max_value) if max_value is not None else None,
         }
         for pollutant, count, exceeded, avg, max_value in rows

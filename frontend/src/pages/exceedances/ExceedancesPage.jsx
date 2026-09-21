@@ -5,25 +5,16 @@ import { SectionCard } from '../../components/common/Card.jsx'
 import { Alert } from '../../components/common/Feedback.jsx'
 import Tag from '../../components/common/Tag.jsx'
 import { useToast } from '../../components/common/ToastProvider.jsx'
+import { EXCEEDANCE_FILTER_KEYS } from '../../constants/filters.js'
 import { useListQuery } from '../../hooks/useListQuery.js'
 import AnnotationModal from './components/AnnotationModal.jsx'
 import ExceedanceFilters from './components/ExceedanceFilters.jsx'
 import ExceedanceSummaryCards from './components/ExceedanceSummaryCards.jsx'
 import ExceedanceTable from './components/ExceedanceTable.jsx'
 
-const INITIAL_FILTERS = {
-  status: '',
-  level: '',
-  pollutant: '',
-  station_id: '',
-  date_from: '',
-  date_to: '',
-  keyword: ''
-}
-
 export default function ExceedancesPage() {
   const toast = useToast()
-  const query = useListQuery(listExceedances, INITIAL_FILTERS)
+  const query = useListQuery(listExceedances, EXCEEDANCE_FILTER_KEYS)
   const [selected, setSelected] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [batch, setBatch] = useState({ status: 'confirmed', note: '', annotator: '' })
@@ -80,7 +71,7 @@ export default function ExceedancesPage() {
         }}
         onReset={() => {
           setSelected([])
-          query.setFilters(INITIAL_FILTERS)
+          query.setFilters(EXCEEDANCE_FILTER_KEYS)
         }}
       />
 

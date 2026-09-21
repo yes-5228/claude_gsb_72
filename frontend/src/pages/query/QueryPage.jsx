@@ -1,39 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { exportQueryUrl, queryMeasurements, queryStatistics } from '../../api/query.js'
-import { downloadFile } from '../../api/client.js'
 import Pagination from '../../components/common/Pagination.jsx'
 import { SectionCard } from '../../components/common/Card.jsx'
 import { Alert } from '../../components/common/Feedback.jsx'
 import StatCard from '../../components/common/StatCard.jsx'
-import { useToast } from '../../components/common/ToastProvider.jsx'
+import { QUERY_FILTER_KEYS } from '../../constants/filters.js'
 import { useAsyncData } from '../../hooks/useAsyncData.js'
+import { useCsvExport } from '../../hooks/useCsvExport.js'
 import { useListQuery } from '../../hooks/useListQuery.js'
-import { saveBlob } from '../../utils/download.js'
 import { formatDateTime, formatNumber, formatPercent } from '../../utils/format.js'
 import QueryFilters from './components/QueryFilters.jsx'
 import QueryResultTable from './components/QueryResultTable.jsx'
 import StatisticsPanel from './components/StatisticsPanel.jsx'
 
-const INITIAL_FILTERS = {
-  keyword: '',
-  station_id: '',
-  area: '',
-  pollutant: '',
-  period: '',
-  is_exceeded: '',
-  exceedance_status: '',
-  data_source: '',
-  date_from: '',
-  date_to: '',
-  min_value: '',
-  max_value: ''
-}
-
 export default function QueryPage() {
-  const toast = useToast()
-  const query = useListQuery(queryMeasurements, INITIAL_FILTERS, { pageSize: 20 })
+  const query = useListQuery(queryMeasurements, QUERY_FILTER_KEYS, { pageSize: 20 })
   const [statsParams, setStatsParams] = useState({ group_by: 'pollutant', metric: 'avg' })
-  const [exporting, setExporting] = useState(false)
+  const { exporting, exportCsv } = useCsvExport(exportQueryUrl)
 
   const statsLoader = useCallback(
     () => queryStatistics({ ...query.filters, ...statsParams }),
@@ -48,18 +31,8 @@ export default function QueryPage() {
     stats.reload().catch(() => {})
   }, [stats.reload])
 
-  const handleExport = async () => {
-    setExporting(true)
-    try {
-      const blob = await downloadFile(exportQueryUrl({ ...query.filters, sort: 'measured_at', order: 'desc' }))
-      saveBlob(blob, `监测数据查询结果_${Date.now()}.csv`)
-      toast.success('导出任务已完成, 请查看下载文件')
-    } catch (error) {
-      toast.error(error.message)
-    } finally {
-      setExporting(false)
-    }
-  }
+  const handleExport = () =>
+    exportCsv({ ...query.filters, sort: 'measured_at', order: 'desc' }, '监测数据查询结果')
 
   return (
     <>
@@ -67,7 +40,7 @@ export default function QueryPage() {
         value={query.filters}
         loading={query.loading}
         onSubmit={(next) => query.setFilters(next)}
-        onReset={() => query.setFilters(INITIAL_FILTERS)}
+        onReset={() => query.setFilters(QUERY_FILTER_KEYS)}
       />
 
       {query.error ? <Alert tone="error">{query.error.message}</Alert> : null}

@@ -1,17 +1,8 @@
 import { useEffect, useState } from 'react'
 import { FilterPanel } from '../../../components/common/Card.jsx'
 import { Field, Input, Select } from '../../../components/common/FormField.jsx'
+import { EXCEEDED_OPTIONS, MEASUREMENT_FILTER_KEYS, PERIOD_OPTIONS } from '../../../constants/filters.js'
 import { usePollutantMeta, useStationOptions } from '../../../hooks/useOptions.js'
-
-const PERIODS = [
-  { value: 'hourly', label: '小时均值' },
-  { value: 'daily', label: '日均值' }
-]
-
-const EXCEEDED_OPTIONS = [
-  { value: 'true', label: '仅超标' },
-  { value: 'false', label: '仅达标' }
-]
 
 export default function MeasurementFilters({ value, loading, onSubmit, onReset }) {
   const [draft, setDraft] = useState(value)
@@ -29,7 +20,7 @@ export default function MeasurementFilters({ value, loading, onSubmit, onReset }
       loading={loading}
       onSearch={() => onSubmit(draft)}
       onReset={() => {
-        setDraft({ station_id: '', pollutant: '', period: '', is_exceeded: '', date_from: '', date_to: '' })
+        setDraft({ ...MEASUREMENT_FILTER_KEYS })
         onReset()
       }}
     >
@@ -53,7 +44,7 @@ export default function MeasurementFilters({ value, loading, onSubmit, onReset }
         />
       </Field>
       <Field label="数据周期">
-        <Select value={draft.period || ''} onChange={update('period')} placeholder="全部周期" options={PERIODS} />
+        <Select value={draft.period || ''} onChange={update('period')} placeholder="全部周期" options={PERIOD_OPTIONS} />
       </Field>
       <Field label="超标情况">
         <Select value={draft.is_exceeded || ''} onChange={update('is_exceeded')} placeholder="全部" options={EXCEEDED_OPTIONS} />

@@ -61,4 +61,13 @@ export function downloadFile(url) {
     .then((response) => response.data)
 }
 
+/**
+ * 统一的导出地址构造: 与列表/统计接口经过同一个 toParams 序列化,
+ * 保证导出与列表命中同一批条件 (多值逗号拼接、空值剔除、布尔 true/false)。
+ */
+export function exportUrl(path, filters = {}, extra = {}) {
+  const params = toParams({ ...filters, ...extra })
+  return `${path}?${new URLSearchParams(params).toString()}`
+}
+
 export default http
