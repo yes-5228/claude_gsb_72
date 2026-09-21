@@ -61,4 +61,9 @@ export function downloadFile(url) {
     .then((response) => response.data)
 }
 
+/** 统一的导出地址拼装: 与列表查询共用同一份参数序列化口径。 */
+export function exportUrl(path, params = {}) {
+  return `${path}?${new URLSearchParams(toParams(params)).toString()}`
+}
+
 export default http

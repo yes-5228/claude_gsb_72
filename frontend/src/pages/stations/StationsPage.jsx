@@ -6,17 +6,16 @@ import { SectionCard } from '../../components/common/Card.jsx'
 import { Alert } from '../../components/common/Feedback.jsx'
 import { useToast } from '../../components/common/ToastProvider.jsx'
 import { useListQuery } from '../../hooks/useListQuery.js'
+import { INITIAL_STATION_FILTERS } from '../../constants/filters.js'
 import { resetOptionCache } from '../../hooks/useOptions.js'
 import StationDetailDrawer from './components/StationDetailDrawer.jsx'
 import StationFilters from './components/StationFilters.jsx'
 import StationFormModal from './components/StationFormModal.jsx'
 import StationTable from './components/StationTable.jsx'
 
-const INITIAL_FILTERS = { keyword: '', area: '', status: '', station_type: '' }
-
 export default function StationsPage() {
   const toast = useToast()
-  const query = useListQuery(listStations, INITIAL_FILTERS)
+  const query = useListQuery(listStations, INITIAL_STATION_FILTERS)
   const [formState, setFormState] = useState({ open: false, station: null })
   const [detailId, setDetailId] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null)
@@ -66,7 +65,7 @@ export default function StationsPage() {
         areas={areas}
         loading={query.loading}
         onSubmit={(next) => query.setFilters(next)}
-        onReset={() => query.setFilters(INITIAL_FILTERS)}
+        onReset={() => query.setFilters(INITIAL_STATION_FILTERS)}
       />
 
       {query.error ? <Alert tone="error">{query.error.message}</Alert> : null}

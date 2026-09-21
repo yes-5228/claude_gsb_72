@@ -1,44 +1,53 @@
-"""监测点台账业务逻辑."""
-from sqlalchemy import cast, func, or_
+"""监测点台账业务逻辑.
+
+列表筛选复用统一的解析口径 (:mod:`app.services.filters`), 排序保持
+"编码/名称/区域/创建时间 + id 兜底" 的确定性次序。统计计数
+(``stats_map`` / ``detail_stats``) 与监测数据查询共用同一套超标定义,
+因此台账页的超标数与查询页按站点聚合的超标数口径一致。
+"""
+from sqlalchemy import cast, func
 
 from ..domain.constants import STATION_STATUS_LABELS, STATION_TYPE_LABELS
 from ..errors import ConflictError, NotFoundError
 from ..extensions import db
 from ..models import Exceedance, Measurement, Station
+from ..models.base import iso
+from . import filters as qf
+from .list_query import apply_ordering
 
+STATION_FILTER_FIELDS = (
+    qf.FilterSpec("keyword", "text"),
+    qf.FilterSpec("areas", "multi", param="area"),
+    qf.FilterSpec("statuses", "multi", param="status",
+                  choices=tuple(STATION_STATUS_LABELS.keys())),
+    qf.FilterSpec("station_types", "multi", param="station_type",
+                  choices=tuple(STATION_TYPE_LABELS.keys())),
+)
 
-def _split(value):
-    if not value:
-        return []
-    return [item.strip() for item in str(value).split(",") if item.strip()]
+_SORT_COLUMNS = {
+    "code": Station.code,
+    "name": Station.name,
+    "area": Station.area,
+    "created_at": Station.created_at,
+}
 
 
 def station_query(args):
+    filters = qf.parse_filter_set(args, STATION_FILTER_FIELDS)
     query = Station.query
-    keyword = (args.get("keyword") or "").strip()
-    if keyword:
-        like = "%" + keyword + "%"
-        query = query.filter(
-            or_(Station.name.like(like), Station.code.like(like), Station.address.like(like))
-        )
-    area = (args.get("area") or "").strip()
-    if area:
-        query = query.filter(Station.area.in_(_split(area)))
-    statuses = _split(args.get("status"))
-    if statuses:
-        query = query.filter(Station.status.in_(statuses))
-    types = _split(args.get("station_type"))
-    if types:
-        query = query.filter(Station.station_type.in_(types))
-
-    sort_field = {
-        "code": Station.code,
-        "name": Station.name,
-        "area": Station.area,
-        "created_at": Station.created_at,
-    }.get(args.get("sort"), Station.code)
-    direction = sort_field.desc() if (args.get("order") or "asc") == "desc" else sort_field.asc()
-    return query.order_by(direction)
+    query = qf.apply_conditions(query, filters, (
+        ("keyword", qf.keyword_any_(Station.name, Station.code, Station.address)),
+        ("areas", qf.in_(Station.area)),
+        # 旧实现没有对 status / station_type 做枚举校验; 为统一口径补校验
+        # (非法取值返回 422), 前端下拉框只会发出合法取值, 页面行为不变。
+        ("statuses", qf.in_(Station.status)),
+        ("station_types", qf.in_(Station.station_type)),
+    ))
+    return apply_ordering(
+        query, args, _SORT_COLUMNS,
+        default_sort="code", default_order="asc",
+        tie_breaker=Station.id.asc(),
+    )
 
 
 def get_station(station_id):
@@ -107,7 +116,6 @@ def stats_map(station_ids):
         .group_by(Measurement.station_id)
         .all()
     )
-    from ..models.base import iso
 
     return {
         station_id: {

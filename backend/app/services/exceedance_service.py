@@ -1,44 +1,70 @@
-"""超标记录查询与人工标注."""
+"""超标记录查询与人工标注.
+
+列表 / 导出 / 工作台统计 / 首页待办共用同一份筛选解析 (:func:`exceedance_filters`)
+与排序 (:func:`exceedance_query`), 统计汇总直接复用已解析的筛选条件,
+保证"工作台列表条数 == summary.total == 导出行数 (上限内)"。
+"""
 from datetime import datetime
 
-from sqlalchemy import cast, func, or_
+from sqlalchemy import func
 
 from ..domain.constants import EXCEEDANCE_LEVEL_LABELS, EXCEEDANCE_STATUS_LABELS
+from ..domain import metrics
 from ..errors import NotFoundError, ValidationError
 from ..extensions import db
-from ..models import Exceedance, Measurement, Station
+from ..models import Exceedance, Station
 from ..models.base import iso
+from . import filters as qf
+from .list_query import apply_ordering
 
 STATUS_CHOICES = tuple(EXCEEDANCE_STATUS_LABELS.keys())
 LEVEL_CHOICES = tuple(EXCEEDANCE_LEVEL_LABELS.keys())
 
+# 超标记录的统一字段规格。关键字语义是"监测点名称/编码 + 标注说明",
+# 与监测数据查询的关键字语义不同, 因此各自保留谓词, 但解析口径一致。
+EXCEEDANCE_FILTER_FIELDS = (
+    qf.FilterSpec("statuses", "multi", param="status", choices=STATUS_CHOICES),
+    qf.FilterSpec("levels", "multi", param="level", choices=LEVEL_CHOICES),
+    qf.FilterSpec("pollutants", "multi", param="pollutant", upper=True),
+    qf.FilterSpec("station_ids", "int_multi", param="station_id"),
+    qf.FilterSpec("areas", "multi", param="area"),
+    qf.FilterSpec("keyword", "text"),
+    qf.FilterSpec("date_from", "date_from",
+                  check_range=("date_from", "date_to", "开始时间不能晚于结束时间")),
+    qf.FilterSpec("date_to", "date_to"),
+    qf.FilterSpec("min_ratio", "float"),
+    qf.FilterSpec("annotated", "bool"),
+)
 
-def _split(value):
-    if not value:
-        return []
-    return [item.strip() for item in str(value).split(",") if item.strip()]
+_SORT_COLUMNS = {
+    "measured_at": Exceedance.measured_at,
+    "exceed_ratio": Exceedance.exceed_ratio,
+    "level": Exceedance.level,
+    "updated_at": Exceedance.updated_at,
+}
 
 
-def _int_list(args, name):
-    values = []
-    for item in _split(args.get(name)):
-        try:
-            values.append(int(item))
-        except ValueError:
-            raise ValidationError("%s 参数必须为整数" % name, fields={name: "invalid_integer"})
-    return values
+def exceedance_filter_set(args):
+    """请求参数 -> 超标记录归一化筛选字典 (列表/统计/导出共用)。"""
+    return qf.parse_filter_set(args, EXCEEDANCE_FILTER_FIELDS)
 
 
-def _date_arg(args, name, end_of_day=False):
-    from datetime import time
-
-    from ..utils.validation import parse_date
-
-    raw = args.get(name)
-    if raw in (None, ""):
-        return None
-    parsed = parse_date(raw, name)
-    return datetime.combine(parsed, time.max if end_of_day else time.min)
+def _apply_exceedance_filters(query, filters):
+    query = qf.apply_conditions(query, filters, (
+        ("statuses", qf.in_(Exceedance.status)),
+        ("levels", qf.in_(Exceedance.level)),
+        ("pollutants", qf.in_(Exceedance.pollutant)),
+        ("station_ids", qf.in_(Exceedance.station_id)),
+        ("areas", qf.in_(Station.area)),
+        ("date_from", qf.ge_(Exceedance.measured_at)),
+        ("date_to", qf.le_(Exceedance.measured_at)),
+        ("min_ratio", qf.ge_(Exceedance.exceed_ratio)),
+        ("annotated", lambda value_query, value: value_query.filter(
+            Exceedance.annotated_at.isnot(None) if value else Exceedance.annotated_at.is_(None)
+        )),
+        ("keyword", qf.keyword_any_(Station.name, Station.code, Exceedance.note)),
+    ))
+    return query
 
 
 def get_exceedance(exceedance_id):
@@ -48,57 +74,21 @@ def get_exceedance(exceedance_id):
     return exceedance
 
 
-def exceedance_query(args):
+def ordered_exceedance_query(filters, args=None):
+    """在已解析筛选条件上拼装 JOIN/谓词/排序 (列表与导出共用)。"""
     query = db.session.query(Exceedance).join(Station, Exceedance.station_id == Station.id)
+    query = _apply_exceedance_filters(query, filters)
+    return apply_ordering(
+        query, args or {}, _SORT_COLUMNS,
+        default_sort="measured_at", default_order="desc",
+        tie_breaker=Exceedance.id.desc(),
+    )
 
-    statuses = _split(args.get("status"))
-    if statuses:
-        query = query.filter(Exceedance.status.in_(statuses))
-    levels = _split(args.get("level"))
-    if levels:
-        query = query.filter(Exceedance.level.in_(levels))
-    pollutants = _split(args.get("pollutant"))
-    if pollutants:
-        query = query.filter(Exceedance.pollutant.in_([item.upper() for item in pollutants]))
-    station_ids = _int_list(args, "station_id")
-    if station_ids:
-        query = query.filter(Exceedance.station_id.in_(station_ids))
-    areas = _split(args.get("area"))
-    if areas:
-        query = query.filter(Station.area.in_(areas))
-    keyword = (args.get("keyword") or "").strip()
-    if keyword:
-        like = "%" + keyword + "%"
-        query = query.filter(
-            or_(Station.name.like(like), Station.code.like(like), Exceedance.note.like(like))
-        )
-    date_from = _date_arg(args, "date_from")
-    if date_from:
-        query = query.filter(Exceedance.measured_at >= date_from)
-    date_to = _date_arg(args, "date_to", end_of_day=True)
-    if date_to:
-        query = query.filter(Exceedance.measured_at <= date_to)
-    min_ratio = args.get("min_ratio")
-    if min_ratio not in (None, ""):
-        try:
-            query = query.filter(Exceedance.exceed_ratio >= float(min_ratio))
-        except ValueError:
-            raise ValidationError("min_ratio 必须为数字", fields={"min_ratio": "invalid_number"})
-    if str(args.get("annotated", "")).strip().lower() in {"1", "true", "yes"}:
-        query = query.filter(Exceedance.annotated_at.isnot(None))
-    elif str(args.get("annotated", "")).strip().lower() in {"0", "false", "no"}:
-        query = query.filter(Exceedance.annotated_at.is_(None))
 
-    order = (args.get("order") or "desc").lower()
-    sort_key = args.get("sort") or "measured_at"
-    column = {
-        "measured_at": Exceedance.measured_at,
-        "exceed_ratio": Exceedance.exceed_ratio,
-        "level": Exceedance.level,
-        "updated_at": Exceedance.updated_at,
-    }.get(sort_key, Exceedance.measured_at)
-    primary = column.desc() if order == "desc" else column.asc()
-    return query.order_by(primary, Exceedance.id.desc())
+def exceedance_query(args):
+    """超标记录完整查询 (列表/导出/统计/首页待办共用)。"""
+    filters = exceedance_filter_set(args)
+    return ordered_exceedance_query(filters, args)
 
 
 def annotate(exceedance, status=None, note=None, annotator=None, level=None):
@@ -177,12 +167,27 @@ def annotate_batch(ids, status, note=None, annotator=None, level=None):
     return {"updated": len(updated), "updated_ids": updated, "missing": missing}
 
 
+def _filtered_subquery(filters):
+    """筛选后的超标记录子查询, 供各项分组统计共用同一口径。"""
+    base = _apply_exceedance_filters(
+        db.session.query(
+            Exceedance.id, Exceedance.station_id,
+            Exceedance.status, Exceedance.level,
+            Exceedance.pollutant, Exceedance.exceed_ratio,
+        ).join(Station, Exceedance.station_id == Station.id),
+        filters,
+    )
+    return base.subquery()
+
+
 def summary(args):
-    """Dashboard counters for the annotation work bench."""
-    base = exceedance_query(args)
-    subquery = base.with_entities(Exceedance.id, Exceedance.station_id,
-                                  Exceedance.status, Exceedance.level,
-                                  Exceedance.pollutant, Exceedance.exceed_ratio).subquery()
+    """Dashboard counters for the annotation work bench.
+
+    ``args`` 可以是原始请求参数, 也可以是已经解析过的归一化筛选字典,
+    避免列表接口里对同一批参数解析两次。
+    """
+    filters = _as_filters(args)
+    subquery = _filtered_subquery(filters)
 
     by_status = {
         status: {"key": status, "label": label, "count": 0}
@@ -205,7 +210,7 @@ def summary(args):
             by_level[level]["count"] = int(count)
 
     top_pollutants = [
-        {"key": pollutant, "count": int(count), "avg_ratio": round(float(avg_ratio or 0), 3)}
+        {"key": pollutant, "count": int(count), "avg_ratio": metrics.ratio3(avg_ratio)}
         for pollutant, count, avg_ratio in (
             db.session.query(
                 subquery.c.pollutant,
@@ -247,7 +252,14 @@ def summary(args):
         "by_level": list(by_level.values()),
         "top_pollutants": top_pollutants,
         "top_stations": top_stations,
-        "max_ratio": round(float(totals[1] or 0), 3),
-        "avg_ratio": round(float(totals[2] or 0), 3),
+        "max_ratio": metrics.ratio3(totals[1] or 0),
+        "avg_ratio": metrics.ratio3(totals[2] or 0),
         "generated_at": iso(datetime.now()),
     }
+
+
+def _as_filters(args):
+    """接受原始参数或已归一化的筛选字典, 归一化结果含本模块的全部键。"""
+    if isinstance(args, dict) and "statuses" in args:
+        return args
+    return exceedance_filter_set(args)

@@ -52,3 +52,22 @@ def register_commands(app):
                 Exceedance.query.count(),
             )
         )
+
+    @app.cli.command("reconcile-exceedances")
+    @click.option("--apply", "apply_changes", is_flag=True,
+                  help="实际写库修复; 缺省只体检不修改数据")
+    def reconcile_exceedances(apply_changes):
+        """按 GB 3095-2012 现行规则体检/修复存量数据的超标判定口径。
+
+        不带 --apply 时为只读体检, 输出各类口径差异数量; 带 --apply 时执行
+        保守修复 (已人工标注的记录一律保留), 详见 services/reconciliation.py。
+        """
+        from .services import reconciliation
+
+        if apply_changes:
+            report = reconciliation.apply_reconciliation()
+            click.echo("口径修复完成: %s" % report["fixed"])
+        else:
+            report = reconciliation.scan_reconciliation()
+            click.echo("体检完成 (只读, 未修改任何数据): %s" % report["counts"])
+            click.echo("确认修复请追加 --apply; 已人工标注的记录不会被改动。")

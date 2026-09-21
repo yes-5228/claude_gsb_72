@@ -28,7 +28,7 @@
 | 数据库 | SQLite(默认, 零依赖) / PostgreSQL 16(可选, compose 覆盖文件) |
 | 前端 | React 18 · React Router 6 · Vite 7 · Axios · 原生 CSS(设计令牌 + 组件类) |
 | 部署 | Docker 多阶段构建 · Nginx 静态托管与 `/api` 反向代理 · docker compose |
-| 测试 | Pytest(43 个后端用例: 接口 + 领域规则) |
+| 测试 | Pytest(52 个后端用例: 接口 + 领域规则 + 跨入口口径一致性) |
 
 ## 目录结构
 
@@ -228,7 +228,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 
 ```bash
 cd backend
-python -m pytest -q          # 43 个用例: 台账 CRUD/级联、录入与超标判定、标注规则、查询统计与导出、元数据接口
+python -m pytest -q          # 52 个用例: 台账 CRUD/级联、录入与超标判定、标注规则、查询统计与导出、元数据接口、跨入口口径一致性
 
 cd frontend
 npm run build                # 生产构建校验
@@ -238,9 +238,14 @@ npm run build                # 生产构建校验
 
 ```bash
 curl http://localhost:5000/api/meta/health
-python -m flask --app wsgi stats      # 查看监测点/数据/超标记录数量
-python -m flask --app wsgi reset-db   # 重置数据库并重建演示数据
+python -m flask --app wsgi stats                 # 查看监测点/数据/超标记录数量
+python -m flask --app wsgi reconcile-exceedances # 只读体检: 存量数据与现行限值口径的差异
+python -m flask --app wsgi reconcile-exceedances --apply  # 保守修复 (保留全部人工标注)
+python -m flask --app wsgi reset-db              # 重置数据库并重建演示数据
 ```
+
+筛选解析、超标判定、达标率、导出的统一口径与必须成立的跨入口不变量,
+见 [`backend/docs/QUERY_CONTRACT.md`](backend/docs/QUERY_CONTRACT.md)。
 
 ## 常见问题
 

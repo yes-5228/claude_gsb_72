@@ -11,24 +11,16 @@ import { SectionCard } from '../../components/common/Card.jsx'
 import { Alert } from '../../components/common/Feedback.jsx'
 import { useToast } from '../../components/common/ToastProvider.jsx'
 import { useListQuery } from '../../hooks/useListQuery.js'
+import { INITIAL_MEASUREMENT_FILTERS } from '../../constants/filters.js'
 import { saveBlob } from '../../utils/download.js'
 import EntryForm from './components/EntryForm.jsx'
 import EntryResultPanel from './components/EntryResultPanel.jsx'
 import MeasurementFilters from './components/MeasurementFilters.jsx'
 import MeasurementTable from './components/MeasurementTable.jsx'
 
-const INITIAL_FILTERS = {
-  station_id: '',
-  pollutant: '',
-  period: '',
-  is_exceeded: '',
-  date_from: '',
-  date_to: ''
-}
-
 export default function MeasurementsPage() {
   const toast = useToast()
-  const query = useListQuery(listMeasurements, INITIAL_FILTERS)
+  const query = useListQuery(listMeasurements, INITIAL_MEASUREMENT_FILTERS)
   const [result, setResult] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -84,7 +76,7 @@ export default function MeasurementsPage() {
         value={query.filters}
         loading={query.loading}
         onSubmit={(next) => query.setFilters(next)}
-        onReset={() => query.setFilters(INITIAL_FILTERS)}
+        onReset={() => query.setFilters(INITIAL_MEASUREMENT_FILTERS)}
       />
 
       {query.error ? <Alert tone="error">{query.error.message}</Alert> : null}

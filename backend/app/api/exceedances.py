@@ -3,6 +3,8 @@ from flask import Blueprint, current_app, request
 
 from ..domain.constants import EXCEEDANCE_LEVEL_LABELS, EXCEEDANCE_STATUS_LABELS, PERIOD_LABELS
 from ..services import exceedance_service
+from ..utils.csv_export import csv_response
+from ..utils.export_columns import EXCEEDANCE_EXPORT_COLUMNS
 from ..utils.pagination import paginate_query
 from ..utils.validation import Validator
 from .helpers import json_payload, list_payload
@@ -12,10 +14,16 @@ bp = Blueprint("exceedances", __name__)
 
 @bp.get("/", strict_slashes=False)
 def list_exceedances():
-    """超标记录列表: 支持状态/等级/因子/站点/时间过滤, 并附带筛选后的统计."""
-    query = exceedance_service.exceedance_query(request.args)
-    result = paginate_query(query, lambda row: row.to_dict())
-    result["summary"] = exceedance_service.summary(request.args)
+    """超标记录列表: 支持状态/等级/因子/站点/时间过滤, 并附带筛选后的统计.
+
+    列表与统计共用同一份解析结果, 保证 summary.total 与列表 total 恒等。
+    """
+    filters = exceedance_service.exceedance_filter_set(request.args)
+    result = paginate_query(
+        exceedance_service.ordered_exceedance_query(filters, request.args),
+        lambda row: row.to_dict(),
+    )
+    result["summary"] = exceedance_service.summary(filters)
     return result
 
 
@@ -41,27 +49,10 @@ def exceedance_options():
 
 @bp.get("/export")
 def export_exceedances():
-    from ..utils.csv_export import csv_response
-
     rows = exceedance_service.exceedance_query(request.args).limit(
         current_app.config["MAX_EXPORT_ROWS"]
     ).all()
-    columns = [
-        ("站点编码", lambda row: row.station.code if row.station else ""),
-        ("站点名称", lambda row: row.station.name if row.station else ""),
-        ("监测因子", "pollutant"),
-        ("监测值", "value"),
-        ("限值", "limit_value"),
-        ("超标倍数", "exceed_ratio"),
-        ("超标等级", lambda row: EXCEEDANCE_LEVEL_LABELS.get(row.level, row.level)),
-        ("标注状态", lambda row: EXCEEDANCE_STATUS_LABELS.get(row.status, row.status)),
-        ("监测时间", lambda row: row.measured_at.strftime("%Y-%m-%d %H:%M")),
-        ("标注说明", "note"),
-        ("标注人", "annotator"),
-        ("标注时间", lambda row: row.annotated_at.strftime("%Y-%m-%d %H:%M")
-            if row.annotated_at else ""),
-    ]
-    return csv_response(rows, columns, "exceedance_records")
+    return csv_response(rows, EXCEEDANCE_EXPORT_COLUMNS, "exceedance_records")
 
 
 @bp.get("/<int:exceedance_id>")

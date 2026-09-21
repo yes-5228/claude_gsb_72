@@ -1,38 +1,18 @@
-import { useEffect, useState } from 'react'
 import { FilterPanel } from '../../../components/common/Card.jsx'
 import { Field, Input, Select } from '../../../components/common/FormField.jsx'
 import { usePollutantMeta, useStationOptions } from '../../../hooks/useOptions.js'
-
-const PERIODS = [
-  { value: 'hourly', label: '小时均值' },
-  { value: 'daily', label: '日均值' }
-]
-
-const EXCEEDED_OPTIONS = [
-  { value: 'true', label: '仅超标' },
-  { value: 'false', label: '仅达标' }
-]
+import { useFilterDraft } from '../../../hooks/useFilterDraft.js'
+import { MEASUREMENT_FILTER_KEYS, PERIOD_OPTIONS, EXCEEDED_OPTIONS } from '../../../constants/filters.js'
 
 export default function MeasurementFilters({ value, loading, onSubmit, onReset }) {
-  const [draft, setDraft] = useState(value)
   const { data: stationData } = useStationOptions()
   const { data: pollutantData } = usePollutantMeta()
-
-  useEffect(() => {
-    setDraft(value)
-  }, [value])
-
-  const update = (key) => (event) => setDraft({ ...draft, [key]: event.target.value })
+  const { draft, update, submit, reset } = useFilterDraft(
+    value, MEASUREMENT_FILTER_KEYS, { onSubmit, onReset }
+  )
 
   return (
-    <FilterPanel
-      loading={loading}
-      onSearch={() => onSubmit(draft)}
-      onReset={() => {
-        setDraft({ station_id: '', pollutant: '', period: '', is_exceeded: '', date_from: '', date_to: '' })
-        onReset()
-      }}
-    >
+    <FilterPanel loading={loading} onSearch={submit} onReset={reset}>
       <Field label="监测点">
         <Select
           value={draft.station_id || ''}
@@ -53,7 +33,7 @@ export default function MeasurementFilters({ value, loading, onSubmit, onReset }
         />
       </Field>
       <Field label="数据周期">
-        <Select value={draft.period || ''} onChange={update('period')} placeholder="全部周期" options={PERIODS} />
+        <Select value={draft.period || ''} onChange={update('period')} placeholder="全部周期" options={PERIOD_OPTIONS} />
       </Field>
       <Field label="超标情况">
         <Select value={draft.is_exceeded || ''} onChange={update('is_exceeded')} placeholder="全部" options={EXCEEDED_OPTIONS} />

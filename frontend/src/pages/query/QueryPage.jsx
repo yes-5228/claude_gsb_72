@@ -8,30 +8,16 @@ import StatCard from '../../components/common/StatCard.jsx'
 import { useToast } from '../../components/common/ToastProvider.jsx'
 import { useAsyncData } from '../../hooks/useAsyncData.js'
 import { useListQuery } from '../../hooks/useListQuery.js'
+import { INITIAL_QUERY_FILTERS } from '../../constants/filters.js'
 import { saveBlob } from '../../utils/download.js'
 import { formatDateTime, formatNumber, formatPercent } from '../../utils/format.js'
 import QueryFilters from './components/QueryFilters.jsx'
 import QueryResultTable from './components/QueryResultTable.jsx'
 import StatisticsPanel from './components/StatisticsPanel.jsx'
 
-const INITIAL_FILTERS = {
-  keyword: '',
-  station_id: '',
-  area: '',
-  pollutant: '',
-  period: '',
-  is_exceeded: '',
-  exceedance_status: '',
-  data_source: '',
-  date_from: '',
-  date_to: '',
-  min_value: '',
-  max_value: ''
-}
-
 export default function QueryPage() {
   const toast = useToast()
-  const query = useListQuery(queryMeasurements, INITIAL_FILTERS, { pageSize: 20 })
+  const query = useListQuery(queryMeasurements, INITIAL_QUERY_FILTERS, { pageSize: 20 })
   const [statsParams, setStatsParams] = useState({ group_by: 'pollutant', metric: 'avg' })
   const [exporting, setExporting] = useState(false)
 
@@ -67,7 +53,7 @@ export default function QueryPage() {
         value={query.filters}
         loading={query.loading}
         onSubmit={(next) => query.setFilters(next)}
-        onReset={() => query.setFilters(INITIAL_FILTERS)}
+        onReset={() => query.setFilters(INITIAL_QUERY_FILTERS)}
       />
 
       {query.error ? <Alert tone="error">{query.error.message}</Alert> : null}
